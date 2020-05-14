@@ -48,14 +48,20 @@ export function proxy (target: Object, sourceKey: string, key: string) {
 export function initState (vm: Component) {
   vm._watchers = []
   const opts = vm.$options
+  // 初始化props
   if (opts.props) initProps(vm, opts.props)
+  // 初始化method
   if (opts.methods) initMethods(vm, opts.methods)
+  // 初始化data
   if (opts.data) {
     initData(vm)
   } else {
+    // 该组件没有data的时候绑定一个空对象
     observe(vm._data = {}, true /* asRootData */)
   }
+  // 初始化computed
   if (opts.computed) initComputed(vm, opts.computed)
+  // 初始化watch
   if (opts.watch && opts.watch !== nativeWatch) {
     initWatch(vm, opts.watch)
   }
@@ -106,12 +112,14 @@ function initProps (vm: Component, propsOptions: Object) {
   }
   observerState.shouldConvert = true
 }
-
+// 初始化data
 function initData (vm: Component) {
   let data = vm.$options.data
+  // 从data函数中拿到data对象
   data = vm._data = typeof data === 'function'
     ? getData(data, vm)
     : data || {}
+  // 判断data是否是对象
   if (!isPlainObject(data)) {
     data = {}
     process.env.NODE_ENV !== 'production' && warn(
@@ -127,6 +135,7 @@ function initData (vm: Component) {
   let i = keys.length
   while (i--) {
     const key = keys[i]
+    // 两个if判断data的值和method、props是否同名
     if (process.env.NODE_ENV !== 'production') {
       if (methods && hasOwn(methods, key)) {
         warn(
@@ -142,13 +151,17 @@ function initData (vm: Component) {
         vm
       )
     } else if (!isReserved(key)) {
+      // 判断是否为保留字段
+      // 将data上面的属性代理到vm实例的_data上
       proxy(vm, `_data`, key)
     }
   }
+  //这里通过observe实例化Observe对象，开始对数据进行绑定，
+  // asRootData用来根数据，用来计算实例化根数据的个数，下面会进行递归observe进行对深层对象的绑定。则asRootData为非true
   // observe data
   observe(data, true /* asRootData */)
 }
-
+// 返回data的对象
 function getData (data: Function, vm: Component): any {
   try {
     return data.call(vm, vm)
