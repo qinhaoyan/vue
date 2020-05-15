@@ -24,14 +24,18 @@ export function initLifecycle (vm: Component) {
   const options = vm.$options
 
   // locate first non-abstract parent
+  // 拿到组件的父级
   let parent = options.parent
+  // 存在父级且自身不为抽象组件
   if (parent && !options.abstract) {
+    // 循环找到最外层非抽象父级 ？？？
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent
     }
+    // 将组件绑定到最外层非抽象父子的子组件中 ？？？
     parent.$children.push(vm)
   }
-
+  // 为组件实例挂载相应属性，并初始化
   vm.$parent = parent
   vm.$root = parent ? parent.$root : vm
 
@@ -39,6 +43,7 @@ export function initLifecycle (vm: Component) {
   vm.$refs = {}
 
   vm._watcher = null
+  // _inactive和_directInactive是判断激活状态的属性
   vm._inactive = null
   vm._directInactive = false
   vm._isMounted = false

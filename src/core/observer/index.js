@@ -32,7 +32,8 @@ export const observerState = {
  * object's property keys into getter/setters that
  * collect dependencies and dispatches updates.
  */
-export class Observer {
+// Observer类是将每个目标对象（即data）的键值转换成getter/setter形式，用于进行依赖收集以及调度更新。
+ export class Observer {
   value: any;
   dep: Dep;
   vmCount: number; // number of vms that has this object as root $data
@@ -41,14 +42,20 @@ export class Observer {
     this.value = value
     this.dep = new Dep()
     this.vmCount = 0
+    // 将Observer实例绑定到data的__ob__属性上面去，之前说过observe的时候会先检测是否已经有__ob__对象存放Observer实例了
+    // 就是调用了Object.defineProperty方法，this是指的Observer实例
     def(value, '__ob__', this)
     if (Array.isArray(value)) {
+      // 如果是数组，将修改后可以截获响应的数组方法替换掉该数组的原型中的原生方法，达到监听数组数据变化响应的效果。
+      // 这里如果当前浏览器支持__proto__属性，则直接覆盖当前数组对象原型上的原生数组方法，如果不支持该属性，则直接覆盖数组对象的原型。
       const augment = hasProto
-        ? protoAugment
-        : copyAugment
+        ? protoAugment // 直接覆盖原型的方法来修改目标对象
+        : copyAugment  // 定义（覆盖）目标对象或数组的某一个方法
       augment(value, arrayMethods, arrayKeys)
+      // 如果是数组则需要遍历数组的每一个成员进行observe
       this.observeArray(value)
     } else {
+      // 如果是对象则直接walk进行绑定
       this.walk(value)
     }
   }
@@ -60,6 +67,7 @@ export class Observer {
    */
   walk (obj: Object) {
     const keys = Object.keys(obj)
+    // walk方法会遍历对象的每一个属性进行defineReactive绑定
     for (let i = 0; i < keys.length; i++) {
       defineReactive(obj, keys[i], obj[keys[i]])
     }
@@ -68,6 +76,7 @@ export class Observer {
   /**
    * Observe a list of Array items.
    */
+  // 数组绑定observe
   observeArray (items: Array<any>) {
     for (let i = 0, l = items.length; i < l; i++) {
       observe(items[i])
@@ -104,23 +113,35 @@ function copyAugment (target: Object, src: Object, keys: Array<string>) {
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
  */
+// 尝试创建一个Observer实例（__ob__），如果成功创建Observer实例则返回新的Observer实例，如果已有Observer实例则返回现有的Observer实例。
+// value是data对象
 export function observe (value: any, asRootData: ?boolean): Observer | void {
   if (!isObject(value) || value instanceof VNode) {
     return
   }
   let ob: Observer | void
+  // 这里用__ob__这个属性来判断是否已经有Observer实例，如果没有Observer实例则会新建一个Observer实例并赋值给__ob__这个属性，
+  // 如果已有Observer实例则直接返回该Observer实例，这里可以看Observer实例化的代码def(value, '__ob__', this)
   if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
     ob = value.__ob__
   } else if (
+    // 这里的判断是为了确保value是单纯的对象，而不是函数或者是Regexp等情况。
+    // 而且该对象在shouldConvert的时候才会进行Observer。这是一个标识位，避免重复对value进行Observer
+    // shouldConvert这个始终为true吧？
     observerState.shouldConvert &&
+    // 判断是否是ssr渲染
     !isServerRendering() &&
+    // 判断value是否是数组或者是否是对象
     (Array.isArray(value) || isPlainObject(value)) &&
+    // 判断value是否是可扩展的
     Object.isExtensible(value) &&
     !value._isVue
   ) {
+    // 实例化Observer
     ob = new Observer(value)
   }
   if (asRootData && ob) {
+    // 如果是根数据则计数，后面Observer中的observe的asRootData非true
     ob.vmCount++
   }
   return ob
@@ -129,33 +150,39 @@ export function observe (value: any, asRootData: ?boolean): Observer | void {
 /**
  * Define a reactive property on an Object.
  */
+// 在walk中使用
 export function defineReactive (
-  obj: Object,
-  key: string,
-  val: any,
+  obj: Object, // data对象
+  key: string, // data对象的属性
+  val: any,    // data对象具体的值
   customSetter?: ?Function,
   shallow?: boolean
 ) {
   const dep = new Dep()
-
+  // 获取data对象上一个自有属性对应的属性描述符
   const property = Object.getOwnPropertyDescriptor(obj, key)
+  // 判断自有属性是否是可修改的
   if (property && property.configurable === false) {
     return
   }
 
   // cater for pre-defined getter/setters
+  // 如果之前该对象已经预设了getter以及setter函数则将其取出来，新定义的getter/setter中会将其执行，保证不会覆盖之前已经定义的getter/setter。
   const getter = property && property.get
   const setter = property && property.set
-
+  // 对象的子对象递归进行observe并返回子节点的Observer对象，就是保证val如果是对象也能监听
   let childOb = !shallow && observe(val)
   Object.defineProperty(obj, key, {
     enumerable: true,
     configurable: true,
     get: function reactiveGetter () {
+      // 如果原本对象拥有getter方法则执行
       const value = getter ? getter.call(obj) : val
       if (Dep.target) {
+        // 进行依赖收集
         dep.depend()
         if (childOb) {
+          // 子对象进行依赖收集，其实就是将同一个watcher观察者实例放进了两个depend中，一个是正在本身闭包中的depend，另一个是子元素的depend
           childOb.dep.depend()
           if (Array.isArray(value)) {
             dependArray(value)
@@ -165,6 +192,7 @@ export function defineReactive (
       return value
     },
     set: function reactiveSetter (newVal) {
+      // 通过getter方法获取当前值，与新值进行比较，一致则不需要执行下面的操作
       const value = getter ? getter.call(obj) : val
       /* eslint-disable no-self-compare */
       if (newVal === value || (newVal !== newVal && value !== value)) {
@@ -175,11 +203,14 @@ export function defineReactive (
         customSetter()
       }
       if (setter) {
+        // 如果原本对象拥有setter方法则执行setter
         setter.call(obj, newVal)
       } else {
         val = newVal
       }
+      // 新的值需要重新进行observe，保证数据响应式
       childOb = !shallow && observe(newVal)
+      // dep对象通知所有的观察者
       dep.notify()
     }
   })
